@@ -26,13 +26,13 @@ export default async function handler(req, res) {
               name: `Invoice #${invoiceId}`,
               description: customerName ? `Hartman Estimate - ${customerName}` : 'Hartman Estimate Invoice',
             },
-            unit_amount: Math.round(amount * 100), // cents
+            unit_amount: Math.round(amount * 100), // amount in cents
           },
           quantity: 1,
         },
       ],
       mode: 'payment',
-      success_url: 'https://example.com/success', // Change to your site or app
+      success_url: 'https://example.com/success', // You can change this later
       cancel_url: 'https://example.com/cancel',
       metadata: {
         app_invoice_id: invoiceId,
@@ -41,8 +41,8 @@ export default async function handler(req, res) {
 
     res.status(200).json({ url: session.url });
   } catch (err) {
-    console.error('Stripe error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Stripe error:', err.message);
+    res.status(500).json({ error: err.message || 'Payment failed' });
   }
 }
 
