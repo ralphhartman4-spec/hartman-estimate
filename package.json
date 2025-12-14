@@ -1,8 +1,9 @@
 {
-  "name": "hartman-stripe-api",
+  "name": "hartman-estimate-backend",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "stripe": "^16.2.0"
+    "stripe": "^16.2.0",
+    "micro": "^10.0.1"
   }
 }
