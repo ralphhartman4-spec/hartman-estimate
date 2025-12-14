@@ -7,3 +7,5 @@ export const config = {
     bodyParser: true,
   },
 };
+
+console.log('Key status:', process.env.STRIPE_SECRET_KEY ? 'set' : 'MISSING');
