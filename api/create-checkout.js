@@ -15,36 +15,38 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing amount or invoiceId' });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      customer_email: customerEmail || undefined,
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `Invoice #${invoiceId}`,
-              description: customerName ? `Hartman Estimate - ${customerName}` : 'Hartman Estimate Invoice',
-            },
-            unit_amount: Math.round(amount * 100),
-          },
-          quantity: 1,
+const session = await stripe.checkout.sessions.create({
+  payment_method_types: ['card'],
+  customer_email: customerEmail || undefined,
+  line_items: [
+    {
+      price_data: {
+        currency: 'usd',
+        product_data: {
+          name: `Invoice #${invoiceId}`,
+          description: customerName ? `Hartman Estimate - ${customerName}` : 'Hartman Estimate Invoice',
         },
-      ],
-      mode: 'payment',
-      success_url: 'https://example.com/success',
-      cancel_url: 'https://example.com/cancel',
-      metadata: {
-        app_invoice_id: invoiceId,
+        unit_amount: Math.round(amount * 100), // amount in cents
       },
-    });
+      quantity: 1,
+    },
+  ],
+  mode: 'payment',
+  success_url: 'https://yourapp.com/success', // Or a page in your app
+  cancel_url: 'https://yourapp.com/cancel',
 
-    res.status(200).json({ url: session.url });
-  } catch (err) {
-    console.error('Stripe error:', err.message);
-    res.status(500).json({ error: err.message || 'Payment failed' });
-  }
-}
+  // === STRIPE CONNECT CHANGES START HERE ===
+  payment_intent_data: {
+    application_fee_amount: Math.round(amount * 100 * 0.03), // YOUR CUT: 3% in cents
+    transfer_data: {
+      destination: connectedStripeAccountId, // The contractor's Stripe account ID
+    },
+  },
+  // This tells Stripe to process on behalf of the connected account
+}, {
+  stripeAccount: connectedStripeAccountId, // Required header for Connect
+});
+// === END CHANGES ===
 
 export const config = {
   api: {
