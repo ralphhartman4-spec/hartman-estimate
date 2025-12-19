@@ -27,7 +27,7 @@ export default async function handler(req, res) {
               name: `Invoice #${invoiceId}`,
               description: customerName ? `Hartman Estimate - ${customerName}` : 'Hartman Estimate Invoice',
             },
-            unit_amount: Math.round(amount * 100),
+            unit_amount: amount, // ← FIXED: amount is already in cents from the app
           },
           quantity: 1,
         },
@@ -44,29 +44,32 @@ export default async function handler(req, res) {
 
     // === STRIPE CONNECT LOGIC ===
     if (connectedAccountId) {
-      // Connected account exists → use Connect + take your cut
-      session = await stripe.checkout.sessions.create({
-        ...sessionParams,
-        payment_intent_data: {
-          application_fee_amount: Math.round(amount * 100 * 0.03), // 3% platform fee (adjust as needed)
-          transfer_data: {
-            destination: connectedAccountId,
+      // Connected account → charge on their behalf + take platform fee
+      session = await stripe.checkout.sessions.create(
+        {
+          ...sessionParams,
+          payment_intent_data: {
+            application_fee_amount: Math.round(amount * 0.03), // 3% fee in cents (adjust as needed)
+            transfer_data: {
+              destination: connectedAccountId,
+            },
           },
         },
-      }, {
-        stripeAccount: connectedAccountId, // Critical: process on behalf of contractor
-      });
+        {
+          stripeAccount: connectedAccountId,
+        }
+      );
     } else {
-      // No connected account → fall back to direct charge (money goes to YOU)
+      // No connected account → direct charge (money goes to your platform account)
       session = await stripe.checkout.sessions.create(sessionParams);
     }
 
     res.status(200).json({ url: session.url });
   } catch (err) {
     console.error('Stripe checkout error:', err);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to create payment link',
-      details: err.message 
+      details: err.message,
     });
   }
 }
