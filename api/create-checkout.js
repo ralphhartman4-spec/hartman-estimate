@@ -8,11 +8,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { amount, invoiceId, customerName, customerEmail, connectedAccountId } = req.body;
+    const {
+      amount,
+      currency = 'USD', // ← Default to USD if not provided
+      invoiceId,
+      customerName,
+      customerEmail,
+      connectedAccountId,
+    } = req.body;
 
     // Basic validation
     if (!amount || amount <= 0 || !invoiceId) {
       return res.status(400).json({ error: 'Missing or invalid amount/invoiceId' });
+    }
+
+    if (!currency) {
+      return res.status(400).json({ error: 'Currency is required' });
     }
 
     // Build base session params
@@ -22,12 +33,14 @@ export default async function handler(req, res) {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: currency.toLowerCase(), // ← Dynamic currency from app
             product_data: {
               name: `Invoice #${invoiceId}`,
-              description: customerName ? `Hartman Estimate - ${customerName}` : 'Hartman Estimate Invoice',
+              description: customerName
+                ? `Hartman Estimate - ${customerName}`
+                : 'Hartman Estimate Invoice',
             },
-            unit_amount: amount, // ← FIXED: amount is already in cents from the app
+            unit_amount: amount, // ← Already in smallest currency unit (cents) from app
           },
           quantity: 1,
         },
@@ -44,12 +57,11 @@ export default async function handler(req, res) {
 
     // === STRIPE CONNECT LOGIC ===
     if (connectedAccountId) {
-      // Connected account → charge on their behalf + take platform fee
       session = await stripe.checkout.sessions.create(
         {
           ...sessionParams,
           payment_intent_data: {
-            application_fee_amount: Math.round(amount * 0.03), // 3% fee in cents (adjust as needed)
+            application_fee_amount: Math.round(amount * 0.03), // 3% platform fee in smallest unit
             transfer_data: {
               destination: connectedAccountId,
             },
@@ -60,7 +72,6 @@ export default async function handler(req, res) {
         }
       );
     } else {
-      // No connected account → direct charge (money goes to your platform account)
       session = await stripe.checkout.sessions.create(sessionParams);
     }
 
