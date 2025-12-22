@@ -50,6 +50,27 @@ export default async function handler(req, res) {
             await AsyncStorage.setItem('allDocuments', JSON.stringify(docs));
             console.log(`Marked invoice ${invoiceId} as paid`);
           }
+
+          // === SEND PUSH NOTIFICATION ===
+          try {
+            const token = await AsyncStorage.getItem('expoPushToken');
+            if (token) {
+              await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  to: token,
+                  title: 'Payment Received! 🎉',
+                  body: `Customer has paid invoice #${invoiceId}`,
+                  sound: 'default',
+                  badge: 1,
+                }),
+              });
+              console.log('Push notification sent');
+            }
+          } catch (pushErr) {
+            console.error('Push notification failed:', pushErr);
+          }
         }
         break;
 
