@@ -1,18 +1,18 @@
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-06-20', // Use latest stable
+  apiVersion: '2024-06-20',
 });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method Not Allowed' });
+    return res.status(405).end('Method Not Allowed');
   }
 
   try {
     const {
-      amount, // in cents (smallest currency unit)
+      amount, // in cents
       currency = 'usd',
       invoiceId,
       customerName = 'Customer',
@@ -45,23 +45,24 @@ export default async function handler(req, res) {
         },
       ],
       customer_email: customerEmail || undefined,
-      success_url: 'https://hartman-estimate.vercel.app/success?session_id={CHECKOUT_SESSION_ID}',
+      success_url: `https://hartman-estimate.vercel.app/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: 'https://hartman-estimate.vercel.app/cancel',
       metadata: {
         invoice_id: invoiceId,
         customer_name: customerName,
       },
+      // ← ADD THIS FOR WEBHOOK "PAID" BADGE
+      client_reference_id: invoiceId,  // Critical for identifying which invoice was paid
     };
 
     let session;
 
     if (connectedAccountId) {
-      // CONNECTED ACCOUNT — transfer funds, take platform fee
       session = await stripe.checkout.sessions.create(
         {
           ...sessionParams,
           payment_intent_data: {
-            application_fee_amount: Math.round(amount * 0.005), // 5% platform fee (adjust as needed)
+            application_fee_amount: Math.round(amount * 0.05), // 5% fee — was 0.005 (0.5%)
             transfer_data: {
               destination: connectedAccountId,
             },
@@ -70,7 +71,6 @@ export default async function handler(req, res) {
         { stripeAccount: connectedAccountId }
       );
     } else {
-      // DIRECT CHARGE — no Connect
       session = await stripe.checkout.sessions.create(sessionParams);
     }
 
@@ -84,7 +84,6 @@ export default async function handler(req, res) {
   }
 }
 
-// Required for larger payloads
 export const config = {
   api: {
     bodyParser: true,
