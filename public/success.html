@@ -1,9 +1,33 @@
 <!DOCTYPE html>
-<html>
-<head><title>Payment Successful</title></head>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Successful</title>
+  <style>
+    body { 
+      font-family: system-ui, sans-serif; 
+      text-align: center; 
+      padding: 60px; 
+      background: #f0fdf4; 
+      color: #065f46; 
+    }
+    h1 { font-size: 2.5rem; margin-bottom: 20px; }
+    p { font-size: 1.2rem; margin-bottom: 40px; }
+    .btn { 
+      display: inline-block; 
+      background: #10b981; 
+      color: white; 
+      padding: 16px 32px; 
+      border-radius: 12px; 
+      text-decoration: none; 
+      font-weight: bold; 
+    }
+  </style>
+</head>
 <body>
-  <h1>Payment Successful!</h1>
+  <h1>Payment Successful! ✅</h1>
   <p>Thank you — the contractor has been notified.</p>
-  <a href="hartmanestimate://">Return to app</a>
+  <a href="hartmanestimate://payment-success" class="btn">Return to App</a>
 </body>
 </html>
