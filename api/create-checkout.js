@@ -62,7 +62,7 @@ export default async function handler(req, res) {
         {
           ...sessionParams,
           payment_intent_data: {
-            application_fee_amount: Math.round(amount * 0.05), // 5% fee — was 0.005 (0.5%)
+            application_fee_amount: Math.round(amount * 0.01), // 5% fee — was 0.005 (0.5%)
             transfer_data: {
               destination: connectedAccountId,
             },
