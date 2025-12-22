@@ -28,7 +28,6 @@ export default async function handler(req, res) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle events
   try {
     switch (event.type) {
       case 'checkout.session.completed':
@@ -38,24 +37,28 @@ export default async function handler(req, res) {
         if (invoiceId) {
           console.log(`Payment succeeded for invoice: ${invoiceId}`);
 
-          // === UPDATE SAVED DOCUMENTS ===
-          const stored = await AsyncStorage.getItem('allDocuments');
-          if (stored) {
-            let docs = JSON.parse(stored);
-            docs = docs.map(doc =>
-              doc.invoiceNumber === invoiceId
-                ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
-                : doc
-            );
-            await AsyncStorage.setItem('allDocuments', JSON.stringify(docs));
-            console.log(`Marked invoice ${invoiceId} as paid`);
+          // === MARK INVOICE AS PAID ===
+          try {
+            const stored = await AsyncStorage.getItem('allDocuments');
+            if (stored) {
+              let docs = JSON.parse(stored);
+              const updated = docs.map(doc =>
+                doc.invoiceNumber === invoiceId
+                  ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
+                  : doc
+              );
+              await AsyncStorage.setItem('allDocuments', JSON.stringify(updated));
+              console.log(`Invoice ${invoiceId} marked as paid in storage`);
+            }
+          } catch (err) {
+            console.error('Failed to update invoice status:', err);
           }
 
           // === SEND PUSH NOTIFICATION ===
           try {
             const token = await AsyncStorage.getItem('expoPushToken');
             if (token) {
-              await fetch('https://exp.host/--/api/v2/push/send', {
+              const response = await fetch('https://exp.host/--/api/v2/push/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -66,10 +69,15 @@ export default async function handler(req, res) {
                   badge: 1,
                 }),
               });
-              console.log('Push notification sent');
+
+              if (response.ok) {
+                console.log('Push notification sent successfully');
+              } else {
+                console.error('Push failed:', await response.text());
+              }
             }
           } catch (pushErr) {
-            console.error('Push notification failed:', pushErr);
+            console.error('Push notification error:', pushErr);
           }
         }
         break;
@@ -85,6 +93,6 @@ export default async function handler(req, res) {
     console.error('Error processing webhook event:', err);
   }
 
-  // Always return 200 to acknowledge receipt
+  // Always acknowledge receipt
   res.status(200).json({ received: true });
 }
