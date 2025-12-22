@@ -1,4 +1,3 @@
-// api/create-checkout.js
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -10,11 +9,11 @@ export default async function handler(req, res) {
 
   try {
     const {
-      amount, // in cents
+      amount,
       invoiceId,
       customerName = 'Customer',
       customerEmail,
-      connectedAccountId, // Contractor's Stripe account
+      connectedAccountId, // Contractor's account ID
     } = req.body;
 
     if (!amount || amount <= 0 || !invoiceId) {
@@ -47,23 +46,22 @@ export default async function handler(req, res) {
     let session;
 
     if (connectedAccountId) {
-      // DESTINATION CHARGE — contractor gets money, you get fee
+      // DESTINATION CHARGE — contractor gets money, BareBones gets fee
       session = await stripe.checkout.sessions.create(
         {
           ...sessionParams,
           payment_intent_data: {
-            application_fee_amount: Math.round(amount * 0.05), // 5% fee to BareBones
+            application_fee_amount: Math.round(amount * 0.05), // 5% to BareBones
             transfer_data: {
               destination: connectedAccountId,
             },
           },
         },
         {
-          stripeAccount: connectedAccountId, // This makes it charge on contractor's behalf
+          stripeAccount: connectedAccountId, // THIS IS REQUIRED
         }
       );
     } else {
-      // Fallback — direct charge to BareBones (shouldn't happen)
       session = await stripe.checkout.sessions.create(sessionParams);
     }
 
