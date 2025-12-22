@@ -1,5 +1,7 @@
+// api/stripe-webhook.js
 import Stripe from 'stripe';
 import { buffer } from 'micro';
+import { kv } from '@vercel/kv';  // Vercel KV for storing push token
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -29,70 +31,62 @@ export default async function handler(req, res) {
   }
 
   try {
-    switch (event.type) {
-      case 'checkout.session.completed':
-        const session = event.data.object;
-        const invoiceId = session.client_reference_id;
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const invoiceId = session.client_reference_id;
 
-        if (invoiceId) {
-          console.log(`Payment succeeded for invoice: ${invoiceId}`);
+      if (invoiceId) {
+        console.log(`Payment succeeded for invoice: ${invoiceId}`);
 
-          // === MARK INVOICE AS PAID ===
-          try {
-            const stored = await AsyncStorage.getItem('allDocuments');
-            if (stored) {
-              let docs = JSON.parse(stored);
-              const updated = docs.map(doc =>
-                doc.invoiceNumber === invoiceId
-                  ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
-                  : doc
-              );
-              await AsyncStorage.setItem('allDocuments', JSON.stringify(updated));
-              console.log(`Invoice ${invoiceId} marked as paid in storage`);
-            }
-          } catch (err) {
-            console.error('Failed to update invoice status:', err);
+        // === MARK INVOICE AS PAID ===
+        try {
+          const stored = await AsyncStorage.getItem('allDocuments');
+          if (stored) {
+            let docs = JSON.parse(stored);
+            docs = docs.map(doc =>
+              doc.invoiceNumber === invoiceId
+                ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
+                : doc
+            );
+            await AsyncStorage.setItem('allDocuments', JSON.stringify(docs));
+            console.log(`Invoice ${invoiceId} marked as paid`);
           }
-
-          // === SEND PUSH NOTIFICATION ===
-          try {
-            const token = await AsyncStorage.getItem('expoPushToken');
-            if (token) {
-              const response = await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  to: token,
-                  title: 'Payment Received! 🎉',
-                  body: `Customer has paid invoice #${invoiceId}`,
-                  sound: 'default',
-                  badge: 1,
-                }),
-              });
-
-              if (response.ok) {
-                console.log('Push notification sent successfully');
-              } else {
-                console.error('Push failed:', await response.text());
-              }
-            }
-          } catch (pushErr) {
-            console.error('Push notification error:', pushErr);
-          }
+        } catch (err) {
+          console.error('Failed to update paid status:', err);
         }
-        break;
 
-      case 'checkout.session.expired':
-        console.log('Checkout session expired:', event.data.object.id);
-        break;
+        // === SEND PUSH NOTIFICATION ===
+        try {
+          const token = await kv.get('expo_push_token');
+          if (token) {
+            const response = await fetch('https://exp.host/--/api/v2/push/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: token,
+                title: 'Payment Received! 🎉',
+                body: `Customer has paid invoice #${invoiceId}`,
+                sound: 'default',
+                badge: 1,
+              }),
+            });
 
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
+            if (response.ok) {
+              console.log('Push notification sent');
+            } else {
+              console.error('Push failed:', await response.text());
+            }
+          } else {
+            console.log('No push token found');
+          }
+        } catch (err) {
+          console.error('Push notification error:', err);
+        }
+      }
     }
   } catch (err) {
-    console.error('Error processing webhook event:', err);
+    console.error('Error processing webhook:', err);
   }
 
-  // Always acknowledge receipt
   res.status(200).json({ received: true });
 }
