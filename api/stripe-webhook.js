@@ -11,39 +11,41 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  if (req.method === 'POST') {
-    const buf = await buffer(req);
-    const sig = req.headers['stripe-signature'];
-
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
-    } catch (err) {
-      console.log(`Webhook signature verification failed.`, err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    // Handle the checkout.session.completed event
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-
-      // session.client_reference_id = your invoice ID (set this when creating checkout)
-      const invoiceId = session.client_reference_id;
-
-      if (invoiceId) {
-        // Here you’d update your database or AsyncStorage
-        // For now, we'll just log
-        console.log(`Payment succeeded for invoice: ${invoiceId}`);
-        
-        // In real app: mark invoice as paid in your saved documents
-        // e.g., update allDocuments with { id: invoiceId, paid: true, paidAt: new Date() }
-      }
-    }
-
-    res.json({ received: true });
-  } else {
+  if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
-    res.status(405).end('Method Not Allowed');
+    return res.status(405).end('Method Not Allowed');
   }
+
+  const buf = await buffer(req);
+  const sig = req.headers['stripe-signature'];
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
+  } catch (err) {
+    console.error(`Webhook signature verification failed:`, err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  switch (event.type) {
+    case 'checkout.session.completed':
+      const session = event.data.object;
+      const invoiceId = session.client_reference_id;
+      if (invoiceId) {
+        console.log(`Payment succeeded for invoice: ${invoiceId}`);
+        // TODO: Update your saved documents here
+        // e.g., mark invoice as paid in AsyncStorage
+      }
+      break;
+
+    case 'checkout.session.expired':
+      console.log('Checkout session expired');
+      break;
+
+    default:
+      console.log(`Unhandled event type: ${event.type}`);
+  }
+
+  res.status(200).json({ received: true });
 }
