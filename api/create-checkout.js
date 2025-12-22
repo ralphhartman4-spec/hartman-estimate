@@ -1,31 +1,23 @@
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-06-20',
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).end('Method Not Allowed');
+    return res.status(405).end();
   }
 
   try {
     const {
       amount, // in cents
-      currency = 'usd',
       invoiceId,
       customerName = 'Customer',
       customerEmail,
-      connectedAccountId,
+      connectedAccountId, // ← Contractor's Stripe account ID
     } = req.body;
 
-    // === VALIDATION ===
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: 'Invalid amount' });
-    }
-    if (!invoiceId) {
-      return res.status(400).json({ error: 'Missing invoiceId' });
+    if (!amount || amount <= 0 || !invoiceId) {
+      return res.status(400).json({ error: 'Invalid request' });
     }
 
     const sessionParams = {
@@ -34,7 +26,7 @@ export default async function handler(req, res) {
       line_items: [
         {
           price_data: {
-            currency: currency.toLowerCase(),
+            currency: 'usd',
             product_data: {
               name: `Invoice #${invoiceId}`,
               description: `Hartman Estimate - ${customerName}`,
@@ -45,47 +37,35 @@ export default async function handler(req, res) {
         },
       ],
       customer_email: customerEmail || undefined,
-      success_url: `https://hartman-estimate.vercel.app/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: 'https://hartman-estimate.vercel.app/success',
       cancel_url: 'https://hartman-estimate.vercel.app/cancel',
-      metadata: {
-        invoice_id: invoiceId,
-        customer_name: customerName,
-      },
-      // ← ADD THIS FOR WEBHOOK "PAID" BADGE
-      client_reference_id: invoiceId,  // Critical for identifying which invoice was paid
+      metadata: { invoice_id: invoiceId },
+      client_reference_id: invoiceId, // for webhook
     };
 
     let session;
 
     if (connectedAccountId) {
-      session = await stripe.checkout.sessions.create(
-        {
-          ...sessionParams,
-          payment_intent_data: {
-            application_fee_amount: Math.round(amount * 0.01), // 5% fee — was 0.005 (0.5%)
-            transfer_data: {
-              destination: connectedAccountId,
-            },
+      // DESTINATION CHARGE — money goes to contractor, you take fee
+      session = await stripe.checkout.sessions.create({
+        ...sessionParams,
+        payment_intent_data: {
+          transfer_data: {
+            destination: connectedAccountId,
           },
+          application_fee_amount: Math.round(amount * 0.05), // ← Your 5% platform fee
         },
-        { stripeAccount: connectedAccountId }
-      );
+      }, {
+        stripeAccount: connectedAccountId,
+      });
     } else {
+      // No connected account — fallback (shouldn't happen in Pro)
       session = await stripe.checkout.sessions.create(sessionParams);
     }
 
     res.status(200).json({ url: session.url });
   } catch (err) {
-    console.error('Stripe checkout error:', err);
-    res.status(500).json({
-      error: 'Failed to create checkout session',
-      message: err.message,
-    });
+    console.error('Checkout error:', err);
+    res.status(500).json({ error: 'Failed to create session' });
   }
 }
-
-export const config = {
-  api: {
-    bodyParser: true,
-  },
-};
