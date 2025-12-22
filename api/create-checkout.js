@@ -13,7 +13,7 @@ export default async function handler(req, res) {
       invoiceId,
       customerName = 'Customer',
       customerEmail,
-      connectedAccountId, // ← Contractor's Stripe account ID
+      connectedAccountId,
     } = req.body;
 
     if (!amount || amount <= 0 || !invoiceId) {
@@ -40,26 +40,26 @@ export default async function handler(req, res) {
       success_url: 'https://hartman-estimate.vercel.app/success',
       cancel_url: 'https://hartman-estimate.vercel.app/cancel',
       metadata: { invoice_id: invoiceId },
-      client_reference_id: invoiceId, // for webhook
+      client_reference_id: invoiceId,
     };
 
     let session;
 
     if (connectedAccountId) {
-      // DESTINATION CHARGE — money goes to contractor, you take fee
+      // CONNECTED ACCOUNT — CORRECT WAY: payment_intent_data in main params + stripeAccount option
       session = await stripe.checkout.sessions.create({
         ...sessionParams,
         payment_intent_data: {
           transfer_data: {
             destination: connectedAccountId,
           },
-          application_fee_amount: Math.round(amount * 0.05), // ← Your 5% platform fee
+          application_fee_amount: Math.round(amount * 0.05), // 5% fee to you
         },
       }, {
         stripeAccount: connectedAccountId,
       });
     } else {
-      // No connected account — fallback (shouldn't happen in Pro)
+      // Direct charge (fallback)
       session = await stripe.checkout.sessions.create(sessionParams);
     }
 
