@@ -19,10 +19,11 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { documents } = await request.json();
+    // Accept raw array directly (no { documents: ... } wrapper)
+    const documents = await request.json();
 
     if (!Array.isArray(documents)) {
-      return new Response(JSON.stringify({ error: 'Invalid data' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Expected array of documents' }), { status: 400 });
     }
 
     await kv.set(DOCUMENTS_KEY, documents);
