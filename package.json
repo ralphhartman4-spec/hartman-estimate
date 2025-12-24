@@ -1,16 +1,15 @@
 {
-  "name": "hartman-estimate-backend",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "vercel dev"
-  },
-  "dependencies": {
-    "stripe": "^16.2.0",
-    "micro": "^10.0.1",
-    "redis": "^4.7.0"
-  },
-  "devDependencies": {
-    "vercel": "^35.0.0"
-  }
+  "name": "hartman-estimate-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "stripe": "^16.2.0",
+    "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "vercel": "^35.0.0"
+  }
 }
