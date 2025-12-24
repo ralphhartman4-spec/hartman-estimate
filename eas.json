@@ -1,0 +1,16 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "production": {
+      "autoIncrement": true
+    },
+    "preview": {
+      "autoIncrement": true
+    },
+    "development": {
+      "autoIncrement": true
+    }
+  }
+}

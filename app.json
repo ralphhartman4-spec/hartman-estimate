@@ -2,28 +2,57 @@
   "expo": {
     "name": "HartmanEstimate",
     "slug": "HartmanEstimate",
-    "version": "1.0.0",
+    "version": "3.0.2",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/hartman-logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "hartmanestimate",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/hartman-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ralph4.HartmanEstimate",
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "This app needs access to save your invoices and estimates to your device.",
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "UIFileSharingEnabled": true,
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "versionCode": 67,
+      "package": "com.ralph4.HartmanEstimate",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/hartman-logo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/hartman-logo.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c6be5c92-31f5-4b4a-b067-e75d8be2b8c8"
+      }
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-file-system",
+        {
+          "storageAccessFramework": true
+        }
+      ]
+    ]
   }
 }

@@ -1,0 +1,190 @@
+{/* HELP OVERLAY — FINAL FIXED VERSION */}
+{helpMode && (
+  <View 
+    pointerEvents="none"
+    style={{
+      position: 'absolute',
+      top: 0, left: 0, right: 0, bottom: 0,
+      zIndex: 9999,
+    }}
+  >
+    {/* Force re-measure on help mode toggle */}
+    <View onLayout={() => setHelpPositions(prev => ({ ...prev, _force: Date.now() }))} />
+
+    {/* === MANAGE JOBS BUTTON === */}
+    {helpPositions.manageJobsBtn && (
+      <View style={{
+        position: 'absolute',
+        top: helpPositions.manageJobsBtn.y - 70,
+        left: Math.max(20, Math.min(
+          helpPositions.manageJobsBtn.x + helpPositions.manageJobsBtn.width / 2 - 150,
+          Dimensions.get('window').width - 320
+        )),
+      }}>
+        <View style={[styles.helpBubble, darkMode ? styles.helpBubbleDark : styles.helpBubbleLight]}>
+          <Text style={[
+    styles.helpBubbleText,
+    darkMode ? styles.helpBubbleTextDark : null
+  ]}>
+            Tap to create jobs and add items!
+          </Text>
+          <View style={[styles.helpBubbleArrow, { 
+            borderTopColor: darkMode ? '#1f2937' : '#ffffff',
+            bottom: -18,
+            left: 225
+          }]} />
+        </View>
+      </View>
+    )}
+    
+    {/* === LABOR RATE HELPER === */}
+    {helpMode && helpPositions.labor && (
+  <View style={[styles.helpBubble, darkMode ? styles.helpBubbleDark : styles.helpBubbleLight,
+    { top: helpPositions.labor.y - 90, left: 40 }]}>
+    <Text style={[styles.helpBubbleText, darkMode && styles.helpBubbleTextDark]}>
+      Set your hourly rates here{'\n'}(standard • OT • travel)
+    </Text>
+    <View style={[styles.helpBubbleArrow, darkMode ? styles.helpBubbleArrowDark : styles.helpBubbleArrowLight]} />
+  </View>
+)}
+
+    {/* === EACH JOB TILE IN ESTIMATE === */}
+    {selectedJobs.map(job => {
+      const pos = helpPositions[`jobTile_${job}`];
+      if (!pos) return null;
+
+      return (
+        <View
+          key={job}
+          style={{
+            position: 'absolute',
+            top: pos.y - 130,
+            left: Math.max(20, Math.min(
+              pos.x + pos.width / 2 - 150,
+              Dimensions.get('window').width - 320
+            )),
+          }}
+        >
+          <View style={[styles.helpBubble, darkMode ? styles.helpBubbleDark : styles.helpBubbleLight]}>
+            <Text style={[
+    styles.helpBubbleText,
+    darkMode ? styles.helpBubbleTextDark : null
+  ]}>
+              Tap to add items to "{job}"
+            </Text>
+            <View style={[styles.helpBubbleArrow, { 
+              borderTopColor: darkMode ? '#1f2937' : '#ffffff',
+              bottom: -18 
+            }]} />
+          </View>
+        </View>
+      );
+    })}
+    
+        {/* === MARKUP + TAX HELP BUBBLE === */}
+    {helpPositions.markupTaxHelp && (
+      <View style={{
+        position: 'absolute',
+        top: helpPositions.markupTaxHelp.y - 50,
+        left: Math.max(20, Math.min(
+          helpPositions.markupTaxHelp.x + helpPositions.markupTaxHelp.width / 2 - 160,
+          Dimensions.get('window').width - 340
+        )),
+        zIndex: 99999,
+      }}>
+        <View style={[styles.helpBubble, darkMode ? styles.helpBubbleDark : styles.helpBubbleLight]}>
+          <Text style={[
+            styles.helpBubbleText,
+            darkMode ? styles.helpBubbleTextDark : null
+          ]}>
+            Adjust markup and tax percentages on items/materials{"\n"}
+            
+          </Text>
+          <View style={[styles.helpBubbleArrow, {
+            borderTopColor: darkMode ? '#1f2937' : '#ffffff',
+            bottom: -18
+          }]} />
+        </View>
+      </View>
+    )}
+
+    {/* === GENERATE PDF HELP BUBBLE === */}
+    {helpPositions.generatePdfHelp && (
+      <View style={{
+        position: 'absolute',
+        top: helpPositions.generatePdfHelp.y - 75,
+        left: Math.max(20, Math.min(
+          helpPositions.generatePdfHelp.x + helpPositions.generatePdfHelp.width / 2 - 180,
+          Dimensions.get('window').width - 380
+        )),
+        zIndex: 99999,
+      }}>
+        <View style={[styles.helpBubble, darkMode ? styles.helpBubbleDark : styles.helpBubbleLight]}>
+          <Text style={[
+            styles.helpBubbleText,
+            darkMode ? styles.helpBubbleTextDark : null
+          ]}>
+            Generate → Review PDF → Share/Print{"\n"}
+            Customer can accept with one tap
+          </Text>
+          <View style={[styles.helpBubbleArrow, {
+            borderTopColor: darkMode ? '#1f2937' : '#ffffff',
+            bottom: -18
+          }]} />
+        </View>
+      </View>
+    )}
+
+    
+
+    {/* === LOGO TOGGLE (Company Logo On/Off) === */}
+    {helpPositions.logoToggle && (
+      <View style={{
+        position: 'absolute',
+        top: helpPositions.logoToggle.y - 50,
+        left: Math.max(20, Math.min(
+          helpPositions.logoToggle.x + helpPositions.logoToggle.width / 2 - 140,
+          Dimensions.get('window').width - 300
+        )),
+      }}>
+        <View style={[styles.helpBubble, darkMode ? styles.helpBubbleDark : styles.helpBubbleLight]}>
+          <Text style={[
+    styles.helpBubbleText,
+    darkMode ? styles.helpBubbleTextDark : null
+  ]}>
+            Turn your logo on/off on estimates
+          </Text>
+          <View style={[styles.helpBubbleArrow, { bottom: -18, borderTopColor: darkMode ? '#1f2937' : '#ffffff' }]} />
+        </View>
+      </View>
+    )}
+
+    {/* === YOUR EMAIL FIELD === */}
+    {helpPositions.yourEmail && (
+      <View style={{
+        position: 'absolute',
+        top: helpPositions.yourEmail.y + helpPositions.yourEmail.height + 20,
+        left: Math.max(20, Math.min(
+          helpPositions.yourEmail.x + 50,
+          Dimensions.get('window').width - 340
+        )),
+      }}>
+        <View style={[styles.helpBubble, darkMode ? styles.helpBubbleDark : styles.helpBubbleLight]}>
+          <Text style={[
+    styles.helpBubbleText,
+    darkMode ? styles.helpBubbleTextDark : null
+  ]}>
+            Get notified of acceptance
+          </Text>
+          <View style={[styles.helpBubbleArrow, { 
+            borderBottomColor: darkMode ? '#1f2937' : '#ffffff',
+            top: -18,
+            borderTopWidth: 0,
+            borderBottomWidth: 18
+          }]} />
+        </View>
+      </View>
+    )}
+  </View>
+)}
+
