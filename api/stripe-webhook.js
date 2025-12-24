@@ -1,10 +1,11 @@
-// api/stripe-webhook.js
-import Stripe from 'stripe';
 import { buffer } from 'micro';
-import { kv } from '@vercel/kv';  // Vercel KV for storing push token
+import { createClient } from 'redis';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+const DOCUMENTS_KEY = 'documents:all';
+const PUSH_TOKEN_KEY = 'expo-push-token';
 
 export const config = {
   api: {
@@ -30,62 +31,64 @@ export default async function handler(req, res) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  try {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const invoiceId = session.client_reference_id;
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const invoiceId = session.metadata?.invoiceId; // ← use metadata, not client_reference_id
 
-      if (invoiceId) {
-        console.log(`Payment succeeded for invoice: ${invoiceId}`);
+    if (!invoiceId) {
+      console.log('No invoiceId in metadata');
+      return res.status(200).json({ received: true });
+    }
 
-        // === MARK INVOICE AS PAID ===
-        try {
-          const stored = await AsyncStorage.getItem('allDocuments');
-          if (stored) {
-            let docs = JSON.parse(stored);
-            docs = docs.map(doc =>
-              doc.invoiceNumber === invoiceId
-                ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
-                : doc
-            );
-            await AsyncStorage.setItem('allDocuments', JSON.stringify(docs));
-            console.log(`Invoice ${invoiceId} marked as paid`);
-          }
-        } catch (err) {
-          console.error('Failed to update paid status:', err);
-        }
+    console.log(`Payment succeeded for invoice #${invoiceId}`);
 
-        // === SEND PUSH NOTIFICATION ===
-        try {
-          const token = await kv.get('expo_push_token');
-          if (token) {
-            const response = await fetch('https://exp.host/--/api/v2/push/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: token,
-                title: 'Payment Received! 🎉',
-                body: `Customer has paid invoice #${invoiceId}`,
-                sound: 'default',
-                badge: 1,
-              }),
-            });
+    const client = createClient({
+      url: process.env.REDIS_URL,
+    });
 
-            if (response.ok) {
-              console.log('Push notification sent');
-            } else {
-              console.error('Push failed:', await response.text());
-            }
-          } else {
-            console.log('No push token found');
-          }
-        } catch (err) {
-          console.error('Push notification error:', err);
+    client.on('error', (err) => console.error('Redis Client Error', err));
+
+    try {
+      await client.connect();
+
+      // Update document status to paid
+      const data = await client.get(DOCUMENTS_KEY);
+      if (data) {
+        let docs = JSON.parse(data);
+        docs = docs.map(doc =>
+          doc.invoiceNumber === invoiceId && doc.type === 'invoice'
+            ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
+            : doc
+        );
+        await client.set(DOCUMENTS_KEY, JSON.stringify(docs));
+        console.log(`Invoice #${invoiceId} marked as paid in Redis`);
+      }
+
+      // Send push notification
+      const token = await client.get(PUSH_TOKEN_KEY);
+      if (token) {
+        const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: token,
+            title: 'Payment Received! 🎉',
+            body: `Invoice #${invoiceId} has been paid`,
+            sound: 'default',
+          }),
+        });
+
+        if (pushResponse.ok) {
+          console.log('Push notification sent');
+        } else {
+          console.error('Push failed:', await pushResponse.text());
         }
       }
+
+      await client.disconnect();
+    } catch (err) {
+      console.error('Redis operation failed:', err);
     }
-  } catch (err) {
-    console.error('Error processing webhook:', err);
   }
 
   res.status(200).json({ received: true });
