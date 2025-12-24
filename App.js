@@ -2164,61 +2164,50 @@ useEffect(() => {
 useEffect(() => {
   const loadData = async () => {
     let loadedDocs = [];
-
     // STEP 1: Try backend first
     try {
       const response = await fetch('https://hartman-estimate.vercel.app/api/save-documents');
       if (response.ok) {
         const data = await response.json();
-        // Handle both { documents: [...] } and raw array
+        // Safe extraction: handles { documents: [...] } or raw array
         const documents = data.documents || data || [];
         if (Array.isArray(documents)) {
           loadedDocs = documents;
           await AsyncStorage.setItem('allDocuments', JSON.stringify(documents));
-          console.log('Loaded', documents.length, 'documents from cloud');
         }
       }
     } catch (err) {
-      console.warn('Backend load failed — using local', err);
+      console.warn('Backend load failed, will use local', err);
     }
-
-    // STEP 2: Fallback to local
+    // STEP 2: If backend failed or returned nothing, fall back to local
     if (loadedDocs.length === 0) {
       try {
         const local = await AsyncStorage.getItem('allDocuments');
         if (local) {
           loadedDocs = JSON.parse(local);
-          console.log('Loaded', loadedDocs.length, 'documents from local');
         }
       } catch (err) {
         console.error('Failed to parse local documents', err);
       }
     }
-
-    // === THIS LINE WAS MISSING ===
+    // === THE MISSING LINE ===
     setAllDocuments(loadedDocs);
-
-    // === LOAD OTHER SETTINGS FROM AsyncStorage (unchanged) ===
+    // === LOCAL SETTINGS (keep these in AsyncStorage) ===
     const savedCustomers = await AsyncStorage.getItem('customerDatabase');
     if (savedCustomers) setCustomerDatabase(JSON.parse(savedCustomers));
-
     const lastInv = await AsyncStorage.getItem('lastInvoiceNumber');
     if (lastInv) {
       setInvoiceNumber(String(parseInt(lastInv) + 1));
     } else {
       setInvoiceNumber('1001');
     }
-
     const addr = await AsyncStorage.getItem('companyAddress');
     if (addr) setCompanyAddress(addr);
-
     const phone = await AsyncStorage.getItem('companyPhone');
     if (phone) setCompanyPhone(phone);
-
     const logo = await AsyncStorage.getItem('logoUri');
     const email = await AsyncStorage.getItem('contractorEmail');
     if (email) setContractorEmail(email);
-
     const noLogo = await AsyncStorage.getItem('hasNoLogo');
     if (noLogo === 'true') {
       setHasNoLogo(true);
@@ -2230,34 +2219,24 @@ useEffect(() => {
       setHasNoLogo(false);
       setLogoUri(null);
     }
-
     const name = await AsyncStorage.getItem('companyName');
     if (name) setCompanyName(name);
-
     const markup = await AsyncStorage.getItem('markupPercent');
     if (markup) setMarkupPercent(markup);
-
     const tax = await AsyncStorage.getItem('taxPercent');
     if (tax) setTaxPercent(tax);
-
     const travel = await AsyncStorage.getItem('travelRate');
     if (travel) setTravelRate(travel);
-
     const otRate = await AsyncStorage.getItem('otRate');
     if (otRate) setOtRate(otRate);
-
     const standardRate = await AsyncStorage.getItem('standardRate');
     if (standardRate) setStandardRate(standardRate);
-
     const dark = await AsyncStorage.getItem('darkMode');
     if (dark === 'true') setDarkMode(true);
-
     const temps = await AsyncStorage.getItem('userTemplates');
     if (temps) setTEMPLATES(JSON.parse(temps));
-
     const items = await AsyncStorage.getItem('globalItems');
     if (items) setGLOBAL_ITEMS(JSON.parse(items));
-
     const jobData = await AsyncStorage.getItem('userJobTypes');
     if (jobData) {
       const parsed = JSON.parse(jobData);
@@ -2273,7 +2252,6 @@ useEffect(() => {
       setJOB_TYPES({});
     }
   };
-
   loadData();
 }, []);
 
