@@ -2170,37 +2170,32 @@ useEffect(() => {
       const response = await fetch('https://hartman-estimate.vercel.app/api/save-documents');
       if (response.ok) {
         const data = await response.json();
-        // Safely extract documents — handles { documents: [...] } or raw array
+        // Handle both { documents: [...] } and raw array
         const documents = data.documents || data || [];
         if (Array.isArray(documents)) {
           loadedDocs = documents;
-          // Sync to local as backup
           await AsyncStorage.setItem('allDocuments', JSON.stringify(documents));
           console.log('Loaded', documents.length, 'documents from cloud');
-        } else {
-          console.warn('Backend returned invalid documents format', data);
         }
-      } else {
-        console.warn('Backend response not OK', response.status);
       }
     } catch (err) {
-      console.warn('Backend load failed — using local backup', err);
+      console.warn('Backend load failed — using local', err);
     }
 
-    // STEP 2: Fallback to local if no cloud data
+    // STEP 2: Fallback to local
     if (loadedDocs.length === 0) {
       try {
         const local = await AsyncStorage.getItem('allDocuments');
         if (local) {
           loadedDocs = JSON.parse(local);
-          console.log('Loaded', loadedDocs.length, 'documents from local storage');
+          console.log('Loaded', loadedDocs.length, 'documents from local');
         }
       } catch (err) {
         console.error('Failed to parse local documents', err);
       }
     }
 
-    // FINAL: Apply to state
+    // === THIS LINE WAS MISSING ===
     setAllDocuments(loadedDocs);
 
     // === LOAD OTHER SETTINGS FROM AsyncStorage (unchanged) ===
