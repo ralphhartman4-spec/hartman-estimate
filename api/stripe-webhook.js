@@ -1,3 +1,4 @@
+import { buffer } from 'micro';
 import { createClient } from 'redis';
 import Stripe from 'stripe';
 
@@ -7,31 +8,38 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 const DOCUMENTS_KEY = 'documents:all';
 const PUSH_TOKEN_KEY = 'expo-push-token';
 
-export async function POST(request) {
-  const rawBody = await request.text();  // ← Raw body for signature verification
-  const sig = request.headers.get('stripe-signature');
+export const config = {
+  api: {
+    bodyParser: false, // ← Critical for raw body
+  },
+};
 
-  if (!sig) {
-    console.error('No stripe-signature header');
-    return new Response('No signature', { status: 400 });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).end('Method Not Allowed');
   }
+
+  // Read raw body (exactly like Stripe sample)
+  const buf = await buffer(req);
+  const sig = req.headers['stripe-signature'];
 
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
-    return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  // Handle successful payment
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const invoiceId = session.metadata?.invoiceId;
 
     if (!invoiceId) {
       console.log('No invoiceId in metadata');
-      return new Response(JSON.stringify({ received: true }), { status: 200 });
+      return res.status(200).json({ received: true });
     }
 
     console.log(`Payment succeeded for invoice #${invoiceId}`);
@@ -57,7 +65,7 @@ export async function POST(request) {
       // Push notification
       const token = await client.get(PUSH_TOKEN_KEY);
       if (token) {
-        const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+        await fetch('https://exp.host/--/api/v2/push/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -67,19 +75,13 @@ export async function POST(request) {
             sound: 'default',
           }),
         });
-
-        if (pushResponse.ok) {
-          console.log('Push notification sent');
-        } else {
-          console.error('Push failed:', await pushResponse.text());
-        }
       }
 
       await client.disconnect();
     } catch (err) {
-      console.error('Redis operation failed:', err);
+      console.error('Redis update failed:', err);
     }
   }
 
-  return new Response(JSON.stringify({ received: true }), { status: 200 });
+  res.status(200).json({ received: true });
 }
