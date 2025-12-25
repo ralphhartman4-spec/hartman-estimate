@@ -15,10 +15,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing amount or invoiceId' });
     }
 
-   
+    const amountInCents = Math.round(parseFloat(amount) * 100); // ← CONVERT DOLLARS TO CENTS
 
-    if (amount < 0 || amount == 0) {
-      return res.status(400).json({ error: 'Amount too small' });
+    if (amountInCents < 50) { // Stripe minimum is 50 cents
+      return res.status(400).json({ error: 'Amount too small (minimum $0.50)' });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -31,16 +31,16 @@ export default async function handler(req, res) {
               name: `Invoice #${invoiceId}`,
               description: customerName ? `Payment for ${customerName}` : 'Invoice payment',
             },
-            unit_amount: amountInCents,
+            unit_amount: amountInCents, // ← NOW IN CENTS
           },
           quantity: 1,
         },
       ],
       mode: 'payment',
-      success_url: 'https://your-app.com/success?session_id={CHECKOUT_SESSION_ID}', // optional
-      cancel_url: 'https://your-app.com/cancel', // optional
+      success_url: `https://hartman-estimate.vercel.app/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `https://hartman-estimate.vercel.app/cancel`,
       metadata: {
-        invoiceId: invoiceId, // ← CRITICAL for webhook
+        invoiceId: invoiceId, // ← Critical for webhook
       },
       customer_email: customerEmail || undefined,
     });
@@ -48,6 +48,6 @@ export default async function handler(req, res) {
     res.status(200).json({ url: session.url });
   } catch (err) {
     console.error('Create checkout error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 }
