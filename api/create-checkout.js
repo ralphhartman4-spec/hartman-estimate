@@ -15,7 +15,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing amount or invoiceId' });
     }
 
-    const amountInCents = Math.round(parseFloat(amount) * 100); // ← CONVERT DOLLARS TO CENTS
+    const amountInCents = amount; // ← CONVERT DOLLARS TO CENTS
 
     if (amountInCents < 50) { // Stripe minimum is 50 cents
       return res.status(400).json({ error: 'Amount too small (minimum $0.50)' });
