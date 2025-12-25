@@ -43,6 +43,7 @@ export default async function handler(req, res) {
     transfer_data: {
       destination: connectedAccountId, // contractor's Stripe account ID
     },
+    application_fee_amount: Math.round(amountInCents * 0.01), // 1% fee to you
   },
       success_url: `https://hartman-estimate.vercel.app/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `https://hartman-estimate.vercel.app/cancel`,
