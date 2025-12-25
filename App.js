@@ -6223,230 +6223,249 @@ placeholderTextColor={darkMode ? "#94a3b8" : "#9ca3af"}
     .sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate))
   }
   keyExtractor={doc => doc.id}
-  renderItem={({ item: doc }) => {
-    const isSelected = selectedHistoryIds[doc.id];
-    const isOverdue = doc.type === 'invoice' && doc.status !== 'paid' && doc.dueDate && new Date(doc.dueDate) < new Date();
-    const isPaid = doc.status === 'paid';
-    const isArchived = doc.archived;
-    const isConverted = !!doc.originalEstimateId;
-
-    const openDocument = async () => {
-      if (doc.pdfUri) {
-        setPdfUri(doc.pdfUri);
-        setCurrentDocForActions(doc);
-        setShowDocumentActionSheet(true);
-      } else {
-        showMsg('Generating PDF...');
-        // your PDF generation logic here
-      }
-    };
-    
-    
-    
-const convertToInvoice = () => {
-  showConfirm({
-    title: "Convert to Invoice?",
-    message: `Estimate #E-${doc.invoiceNumber}\n${doc.customer?.name || 'Customer'}\nAmount: ${getCurrencySymbol()}${doc.amount?.toFixed(2) || '0.00'}\n\nThis will create an invoice and archive the estimate.`,
-    confirmText: "Convert & Archive",
-    onConfirm: async () => {
-      setIsGeneratingPayment(true);
-
-      try {
-        // Generate fresh PDF for the invoice (includes payment button if connected)
-        const result = await generateDocumentPdf({
-          isInvoice: true,
-          invoiceNumber: doc.invoiceNumber,
-          customer: doc.customer || {},
-          companyName,
-          companyAddress,
-          companyPhone,
-          contractorEmail,
-          logoUri,
-          jobs: doc.jobs || [],
-          itemsByJob: doc.itemsByJob || {},
-          notes: doc.notes || '',
-          jobsitePhotos: doc.jobsitePhotos || [],
-          labor: doc.labor || {},
-          rates: doc.rates || {},
-          markupPercent: doc.markupPercent || 0,
-          taxPercent: doc.taxPercent || 0,
-          grandTotalOverride: doc.grandTotal || doc.amount,
-          overridePaymentUrl: doc.paymentUrl, // preserve existing link if any
-        });
-
-        // Archive the original estimate
-        const archivedEstimate = {
-          ...doc,
-          archived: true,
-          type: 'estimate', // ensure it stays as estimate
-        };
-
-        // Create the new invoice
-        const newInvoice = {
-          ...doc,
-          id: Date.now().toString(),
-          type: 'invoice',
-          invoiceNumber: doc.invoiceNumber, // same number
-          originalEstimateId: doc.id,
-          createdDate: new Date().toISOString(),
-          status: 'unpaid',
-          pdfUri: result.pdfUri,           // fresh PDF with payment button
-          paymentUrl: result.paymentUrl || doc.paymentUrl || null,
-          paymentStatus: result.paymentUrl ? 'pending' : null,
-          archived: false,
-        };
-
-        // Update list: archive old + add new invoice on top
-        const updatedDocs = allDocuments.map(d =>
-          d.id === doc.id ? archivedEstimate : d
-        );
-        updatedDocs.unshift(newInvoice);
-
-        // Update state
-        setAllDocuments(updatedDocs);
-
-        // === TRY BACKEND ===
-        try {
-          await fetch('https://hartman-estimate.vercel.app/api/save-documents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedDocs),
-          });
-          console.log('Convert to invoice synced to backend');
-        } catch (err) {
-          console.warn('Backend sync failed — saved locally', err);
-        }
-
-        // === ALWAYS SAVE LOCALLY ===
-        try {
-          await AsyncStorage.setItem('allDocuments', JSON.stringify(updatedDocs));
-        } catch (err) {
-          console.error('Local save failed after conversion!', err);
-          showMsg('Converted in app, but sync failed');
-        }
-
-        // Success feedback
-        showQuickToast(
-          `Converted! Invoice #${doc.invoiceNumber} created${result.paymentUrl ? ' • Payment link attached' : ''}`
-        );
-
-      } catch (err) {
-        console.error('Conversion failed:', err);
-        showMsg('Conversion failed — check connection or Stripe');
-      } finally {
-        setIsGeneratingPayment(false);
-      }
-    },
-  });
-};
- 
-const markAsPaid = () => {
-  showConfirm({
-    title: "Mark as Paid?",
-    message: `Invoice #${doc.invoiceNumber}\n${doc.customerName || 'Customer'}\nAmount: ${getCurrencySymbol()}${doc.amount?.toFixed(2) || '0.00'}`,
-    confirmText: "Mark as Paid",
-    onConfirm: async () => {
-      try {
-        // Update status to paid
-        const updatedDocs = allDocuments.map(d =>
-          d.id === doc.id ? { ...d, status: 'paid' } : d
-        );
-
-        // Update state immediately
-        setAllDocuments(updatedDocs);
-
-        // === TRY BACKEND ===
-        try {
-          await fetch('https://hartman-estimate.vercel.app/api/save-documents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedDocs),
-          });
-          console.log('Marked as paid — synced to backend');
-        } catch (err) {
-          console.warn('Backend sync failed — saved locally only', err);
-        }
-
-        // === ALWAYS SAVE LOCALLY ===
-        try {
-          await AsyncStorage.setItem('allDocuments', JSON.stringify(updatedDocs));
-        } catch (err) {
-          console.error('Local save failed after marking paid!', err);
-          showMsg('Marked as paid in app, but sync failed');
-          return;
-        }
-
-        // Success feedback
-        Toast.show({
-          type: 'success',
-          text1: 'Marked as paid! 💰',
-        });
-
-      } catch (err) {
-        console.error('Unexpected error marking invoice as paid:', err);
-        showMsg('Failed to mark as paid');
-      }
-    },
-  });
-};
-
-  // Determine badge color and text'#6366f1'
-  const getBadgeStyle = () => {
-    if (isPaid) return { bg: '#10b981', text: 'PAID', icon: 'checkmark-circle' };
-    if (isOverdue) return { bg: '#ef4444', text: 'OVERDUE', icon: null };
-    if (isArchived) return { bg: '#6b7280', text: 'ARCHIVED', icon: null };
-    if (isConverted) return { bg: '#6366f1', icon: "receipt-outline", justifyContent: 'center',
-    alignItems: 'center', position: 'absolute' };
-    if (doc.type === 'invoice' && doc.status !== 'paid') return { bg: '#6366f1', icon: "receipt-outline" };
-    return null;
+renderItem={({ item: doc }) => {
+  const isSelected = selectedHistoryIds[doc.id];
+  const isOverdue = doc.type === 'invoice' && doc.status !== 'paid' && doc.dueDate && new Date(doc.dueDate) < new Date();
+  const isPaid = doc.status === 'paid';
+  const isArchived = doc.archived;
+  const isConverted = !!doc.originalEstimateId;
+  const openDocument = async () => {
+    if (doc.pdfUri) {
+      setPdfUri(doc.pdfUri);
+      setCurrentDocForActions(doc);
+      setShowDocumentActionSheet(true);
+    } else {
+      showMsg('Generating PDF...');
+      // your PDF generation logic here
+    }
   };
 
-  const badge = getBadgeStyle();
+  const convertToInvoice = () => {
+    showConfirm({
+      title: "Convert to Invoice?",
+      message: `Estimate #E-${doc.invoiceNumber}\n${doc.customer?.name || 'Customer'}\nAmount: ${getCurrencySymbol()}${doc.amount?.toFixed(2) || '0.00'}\n\nThis will create an invoice and archive the estimate.`,
+      confirmText: "Convert & Archive",
+      onConfirm: async () => {
+        setIsGeneratingPayment(true);
+        try {
+          const result = await generateDocumentPdf({
+            isInvoice: true,
+            invoiceNumber: doc.invoiceNumber,
+            customer: doc.customer || {},
+            companyName,
+            companyAddress,
+            companyPhone,
+            contractorEmail,
+            logoUri,
+            jobs: doc.jobs || [],
+            itemsByJob: doc.itemsByJob || {},
+            notes: doc.notes || '',
+            jobsitePhotos: doc.jobsitePhotos || [],
+            labor: doc.labor || {},
+            rates: doc.rates || {},
+            markupPercent: doc.markupPercent || 0,
+            taxPercent: doc.taxPercent || 0,
+            grandTotalOverride: doc.grandTotal || doc.amount,
+            overridePaymentUrl: doc.paymentUrl,
+          });
+          const archivedEstimate = {
+            ...doc,
+            archived: true,
+            type: 'estimate',
+          };
+          const newInvoice = {
+            ...doc,
+            id: Date.now().toString(),
+            type: 'invoice',
+            invoiceNumber: doc.invoiceNumber,
+            originalEstimateId: doc.id,
+            createdDate: new Date().toISOString(),
+            status: 'unpaid',
+            pdfUri: result.pdfUri,
+            paymentUrl: result.paymentUrl || doc.paymentUrl || null,
+            paymentStatus: result.paymentUrl ? 'pending' : null,
+            archived: false,
+          };
+          const updatedDocs = allDocuments.map(d =>
+            d.id === doc.id ? archivedEstimate : d
+          );
+          updatedDocs.unshift(newInvoice);
+          setAllDocuments(updatedDocs);
+          try {
+            await fetch('https://hartman-estimate.vercel.app/api/save-documents', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatedDocs),
+            });
+            console.log('Convert to invoice synced to backend');
+          } catch (err) {
+            console.warn('Backend sync failed — saved locally', err);
+          }
+          try {
+            await AsyncStorage.setItem('allDocuments', JSON.stringify(updatedDocs));
+          } catch (err) {
+            console.error('Local save failed after conversion!', err);
+            showMsg('Converted in app, but sync failed');
+          }
+          showQuickToast(
+            `Converted! Invoice #${doc.invoiceNumber} created${result.paymentUrl ? ' • Payment link attached' : ''}`
+          );
+        } catch (err) {
+          console.error('Conversion failed:', err);
+          showMsg('Conversion failed — check connection or Stripe');
+        } finally {
+          setIsGeneratingPayment(false);
+        }
+      },
+    });
+  };
+  const markAsPaid = () => {
+    showConfirm({
+      title: "Mark as Paid?",
+      message: `Invoice #${doc.invoiceNumber}\n${doc.customerName || 'Customer'}\nAmount: ${getCurrencySymbol()}${doc.amount?.toFixed(2) || '0.00'}`,
+      confirmText: "Mark as Paid",
+      onConfirm: async () => {
+        try {
+          const updatedDocs = allDocuments.map(d =>
+            d.id === doc.id ? { ...d, status: 'paid' } : d
+          );
+          setAllDocuments(updatedDocs);
+          try {
+            await fetch('https://hartman-estimate.vercel.app/api/save-documents', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatedDocs),
+            });
+            console.log('Marked as paid — synced to backend');
+          } catch (err) {
+            console.warn('Backend sync failed — saved locally only', err);
+          }
+          try {
+            await AsyncStorage.setItem('allDocuments', JSON.stringify(updatedDocs));
+          } catch (err) {
+            console.error('Local save failed after marking paid!', err);
+            showMsg('Marked as paid in app, but sync failed');
+            return;
+          }
+          Toast.show({
+            type: 'success',
+            text1: 'Marked as paid! 💰',
+          });
+        } catch (err) {
+          console.error('Unexpected error marking invoice as paid:', err);
+          showMsg('Failed to mark as paid');
+        }
+      },
+    });
+  };
 
   return (
     <TouchableOpacity
-  activeOpacity={0.9}
-  style={{
-    backgroundColor: isSelected
-      ? (darkMode ? '#1e3a8a' : '#e0e7ff')
-      : (isArchived || isConverted ? (darkMode ? '#1f2937' : '#ffffff') : (darkMode ? 'rgba(255,255,255,0.08)' : '#ffffff')),
-    marginHorizontal: 20,
-    marginVertical: 8,
-    padding: 20,
-    borderRadius: 20,
-    borderWidth: isSelected ? 4 : 0,
-    borderColor: isSelected ? '#6366f1' : 'transparent',
-    borderLeftWidth: isSelected ? 0 : 6,
-    borderLeftColor: !isSelected ? (doc.type === 'invoice' ? '#6366f1' : '#10b981') : 'transparent',
-    opacity: isArchived ? 0.7 : 1,
-    elevation: isSelected ? 20 : 6,
-    position: 'relative',
-  }}
-  onPress={() => {
-  if (isHistoryMultiSelect) {
-    setSelectedHistoryIds(prev => {
-      const newSelection = { ...prev };
-      if (newSelection[doc.id]) {
-        delete newSelection[doc.id];
-      } else {
-        newSelection[doc.id] = true;
-      }
-      return newSelection;
-    });
-  } else {
-    openDocument();
-  }
-}}
-onLongPress={() => {
-  if (!isHistoryMultiSelect) {
-    setIsHistoryMultiSelect(true);
-  }
-  setSelectedHistoryIds(prev => ({
-    ...prev,
-    [doc.id]: true
-  }));
-}}
->
+      activeOpacity={0.9}
+      style={{
+        backgroundColor: isSelected
+          ? (darkMode ? '#1e3a8a' : '#e0e7ff')
+          : (isArchived || isConverted ? (darkMode ? '#1f2937' : '#ffffff') : (darkMode ? 'rgba(255,255,255,0.08)' : '#ffffff')),
+        marginHorizontal: 20,
+        marginVertical: 8,
+        padding: 20,
+        borderRadius: 20,
+        borderWidth: isSelected ? 4 : 0,
+        borderColor: isSelected ? '#6366f1' : 'transparent',
+        borderLeftWidth: isSelected ? 0 : 6,
+        borderLeftColor: !isSelected ? (doc.type === 'invoice' ? '#6366f1' : '#10b981') : 'transparent',
+        opacity: isArchived ? 0.7 : 1,
+        elevation: isSelected ? 20 : 6,
+        position: 'relative',
+      }}
+      onPress={() => {
+        if (isHistoryMultiSelect) {
+          setSelectedHistoryIds(prev => {
+            const newSelection = { ...prev };
+            if (newSelection[doc.id]) {
+              delete newSelection[doc.id];
+            } else {
+              newSelection[doc.id] = true;
+            }
+            return newSelection;
+          });
+        } else {
+          openDocument();
+        }
+      }}
+      onLongPress={() => {
+        if (!isHistoryMultiSelect) {
+          setIsHistoryMultiSelect(true);
+        }
+        setSelectedHistoryIds(prev => ({
+          ...prev,
+          [doc.id]: true
+        }));
+      }}
+    >
+      {/* SMALL LINK ICON — TOP LEFT */}
+      {doc.type === 'invoice' && (
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            const currentTotal = doc.grandTotal ?? doc.amount ?? 0;
+            const isZeroAmount = currentTotal === 0;
+            const isTooLarge = currentTotal >= 1000000;
+            const isEligibleForLink =
+              doc.type === 'invoice' &&
+              doc.status !== 'paid' &&
+              !doc.archived &&
+              !doc.paymentUrl &&
+              !isZeroAmount &&
+              !isTooLarge;
+            if (isZeroAmount || isTooLarge) {
+              showQuickToast(
+                isZeroAmount
+                  ? 'Balance is $0 ➜ add items or labor to enable payment link'
+                  : 'Amount too high ⚠️ payment links not available over $50,000'
+              );
+              return;
+            }
+            if (!isPro) {
+              setShowPaywall(true);
+              showQuickToast('Payment links are a Pro feature');
+              return;
+            }
+            if (!isStripeConnected) {
+              const clientId = 'ca_Td84AN3WWsoqlUNxi5iOafDNFSAtjX5c';
+              const redirectUri = 'https://hartman-estimate.vercel.app/api/stripe-callback';
+              const authUrl = `https://connect.stripe.com/oauth/authorize`
+                + `?response_type=code`
+                + `&client_id=${clientId}`
+                + `&scope=read_write`
+                + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+                + `&state=hartman_estimate_v1`;
+              Linking.openURL(authUrl);
+              AsyncStorage.setItem('pendingAttachDocId', doc.id);
+              return;
+            }
+            if (isEligibleForLink) {
+              generatePaymentLink(doc);
+            }
+          }}
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            zIndex: 10,
+            backgroundColor: 'rgba(255,255,255,0.8)',
+            padding: 8,
+            borderRadius: 20,
+          }}
+        >
+          <Ionicons
+            name={doc.paymentUrl ? 'link' : 'link-outline'}
+            size={20}
+            color={doc.paymentUrl ? '#6366f1' : '#9ca3af'}
+          />
+        </TouchableOpacity>
+      )}
+
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
           <Text style={{ color: isSelected ? '#fcd34d' : (darkMode ? 'white' : '#1f2937'), fontWeight: 'bold', fontSize: 19 }}>
@@ -6458,175 +6477,84 @@ onLongPress={() => {
           <Text style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: 13, marginTop: 4 }}>
             {new Date(doc.createdDate).toLocaleDateString()}
           </Text>
+
+          {/* DUE DATE */}
+          {doc.type === 'invoice' && doc.dueDate && (
+            <Text style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: 13, marginTop: 4 }}>
+              Due: {new Date(doc.dueDate).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+              })}
+            </Text>
+          )}
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={{ color: isSelected ? '#fcd34d' : (darkMode ? 'white' : '#1f2937'), fontWeight: 'bold', fontSize: 19 }}>
-         {getCurrencySymbol()}{formatPrice(doc.amount || 0)}
+            {getCurrencySymbol()}{formatPrice(doc.amount || 0)}
           </Text>
         </View>
       </View>
 
-    {doc.type !== 'invoice' && !doc.archived && !doc.originalEstimateId && (
-  <TouchableOpacity
-    onPress={(e) => { e.stopPropagation(); convertToInvoice(); }}
-    style={{
-      position: 'absolute',
-      top: 60,
-      left: 100,
-      zIndex: 100,
-      backgroundColor: 'rgba(99, 102, 241, 0.15)',  // 15% opacity purple = glass effect
-      borderWidth: 2,
-      borderColor: '#6366f1',                        // Solid purple border
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 16,
-      flexDirection: 'row',
-      gap: 8,
-      alignItems: 'center',
-      elevation: 10,
-      backdropFilter: 'blur(10px)', // Not supported in RN, but we fake it with opacity
-    }}
-  >
-    <Ionicons name="receipt-outline" size={18} color="#6366f1" />
-    <Text style={{ 
-      color: '#6366f1', 
-      fontWeight: '900', 
-      fontSize: 14 
-    }}>
-      Convert
-    </Text>
-  </TouchableOpacity>
-)}
+      {/* STATUS BADGE — BOTTOM RIGHT */}
+      {doc.type === 'invoice' && (
+        <View style={{
+          position: 'absolute',
+          bottom: 16,
+          right: 16,
+          backgroundColor: isPaid ? '#10b981' : isOverdue ? '#92400e' : '#6366f1',
+          paddingHorizontal: 16,
+          paddingVertical: 8,
+          borderRadius: 24,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          shadowColor: '#000',
+          shadowOpacity: 0.3,
+          shadowRadius: 6,
+          elevation: 8,
+        }}>
+          {isPaid && <Ionicons name="checkmark-circle" size={18} color="white" />}
+          <Text style={{ color: 'white', fontWeight: '900', fontSize: 13 }}>
+            {isPaid ? 'PAID' : isOverdue ? 'OVERDUE' : 'INVOICED'}
+          </Text>
+        </View>
+      )}
 
+      {/* YOUR EXISTING CONVERT BUTTON */}
+      {doc.type !== 'invoice' && !doc.archived && !doc.originalEstimateId && (
+        <TouchableOpacity
+          onPress={(e) => { e.stopPropagation(); convertToInvoice(); }}
+          style={{
+            position: 'absolute',
+            top: 60,
+            left: 100,
+            zIndex: 100,
+            backgroundColor: 'rgba(99, 102, 241, 0.15)',
+            borderWidth: 2,
+            borderColor: '#6366f1',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 16,
+            flexDirection: 'row',
+            gap: 8,
+            alignItems: 'center',
+            elevation: 10,
+          }}
+        >
+          <Ionicons name="receipt-outline" size={18} color="#6366f1" />
+          <Text style={{
+            color: '#6366f1',
+            fontWeight: '900',
+            fontSize: 14
+          }}>
+            Convert
+          </Text>
+        </TouchableOpacity>
+      )}
 
- {/* STATUS BADGE + PAYMENT LINK BUTTON — ONLY FOR INVOICES */}
-{doc.type === 'invoice' && (
-  <View style={{ position: 'absolute', bottom: 12, right: 12 }}>
-    {(() => {
-      const currentTotal = doc.grandTotal ?? doc.amount ?? 0;
-      const isZeroAmount = currentTotal === 0;
-      const isTooLarge = currentTotal >= 1000000;
-      const isEligibleForLink = 
-        doc.type === 'invoice' && 
-        doc.status !== 'paid' && 
-        !doc.archived && 
-        !doc.paymentUrl && 
-        !isZeroAmount && 
-        !isTooLarge;
-
-      return (
-       <TouchableOpacity
-
- onPress={(e) => {
-  e.stopPropagation();
-
-  // "NOT AVAILABLE" case — show explanation bubble
-  if (isZeroAmount || isTooLarge) {
-    showQuickToast(
-      isZeroAmount
-        ? 'Balance is $0 ➜ add items or labor to enable payment link'
-        : 'Amount too high ⚠️ payment links not available over $50,000'
-    );
-    return;
-  }
-
-  // === PRO FEATURE GATE ===
-  if (!isPro) {
-    setShowPaywall(true);
-    showQuickToast('Payment links are a Pro feature');
-    return;
-  }
-
-  // Not connected → open Stripe connect
-  if (!isStripeConnected) {
-    const clientId = 'ca_Td84AN3WWsoqlUNxi5iOafDNFSAtjX5c';
-    const redirectUri = 'https://hartman-estimate.vercel.app/api/stripe-callback';
-    const authUrl = `https://connect.stripe.com/oauth/authorize`
-      + `?response_type=code`
-      + `&client_id=${clientId}`
-      + `&scope=read_write`
-      + `&redirect_uri=${encodeURIComponent(redirectUri)}`
-      + `&state=hartman_estimate_v1`;
-
-    Linking.openURL(authUrl);
-    AsyncStorage.setItem('pendingAttachDocId', doc.id);
-    return;
-  }
-
-  // Connected and eligible → generate link
-  if (isEligibleForLink) {
-    generatePaymentLink(doc);
-  }
-}}
-  // Make it tappable even when disabled, so we can show the bubble
-  // disabled={doc.status === 'paid'}  // Only disable if paid
-  style={{
-    backgroundColor:
-      doc.status === 'paid'
-        ? '#10b981'
-        : doc.paymentUrl
-          ? '#6366f1'
-          : !isStripeConnected
-            ? (darkMode ? '#374151' : '#e2e8f0')
-            : (isZeroAmount || isTooLarge)
-              ? '#6b7280'
-              : '#6366f1',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 12,
-    opacity: doc.status === 'paid' ? 1 : (isZeroAmount || isTooLarge) ? 0.65 : 1,
-  }}
->
-  {doc.status === 'paid' ? (
-    <>
-      <Ionicons name="checkmark-circle" size={20} color="white" />
-      <Text style={{ color: 'white', fontWeight: '900', fontSize: 13 }}>PAID</Text>
-    </>
-  ) : doc.paymentUrl ? (
-    <>
-      <Ionicons name="link" size={18} color="white" />
-      <Text style={{ color: 'white', fontWeight: '900', fontSize: 13 }}>LINK ATTACHED</Text>
-    </>
-  ) : !isStripeConnected && !(isZeroAmount || isTooLarge) ? (
-    <>
-      <Ionicons name="link-outline" size={18} color={darkMode ? '#9ca3af' : '#6b7280'} />
-      <Text style={{ color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: '700', fontSize: 13 }}>
-        ATTACH LINK
-      </Text>
-    </>
-  ) : (isZeroAmount || isTooLarge) ? (
-   <>
-    <Ionicons 
-      name="close-circle" 
-      size={18} 
-      color={darkMode ? 'white' : '#1f2937'}  // ← Dark gray in light mode
-    />
-    <Text style={{ 
-      color: darkMode ? 'white' : '#1f2937',   // ← Dark text in light mode
-      fontWeight: '700', 
-      fontSize: 12 
-    }}>
-      NOT AVAILABLE
-    </Text>
-  </>
-  ) : (
-    <>
-      <Ionicons name="link-outline" size={18} color="white" />
-      <Text style={{ color: 'white', fontWeight: '900', fontSize: 13 }}>ATTACH LINK</Text>
-    </>
-  )}
-</TouchableOpacity>
-      );
-    })()}
-  </View>
-)}
+      {/* YOUR EXISTING PAYMENT LINK BUTTON — REMOVED FROM BOTTOM RIGHT TO AVOID OVERLAP */}
+      {/* It is now the small icon in top-left */}
     </TouchableOpacity>
   );
 }}
