@@ -6,10 +6,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 const DOCUMENTS_KEY = 'documents:all';
+const PUSH_TOKEN_KEY = 'expo-push-token';
 
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: false, // ← Critical: disables automatic parsing
   },
 };
 
@@ -18,8 +19,14 @@ export default async function handler(req, res) {
     return res.status(405).end('Method Not Allowed');
   }
 
+  // Read raw body
   const buf = await buffer(req);
   const sig = req.headers['stripe-signature'];
+
+  if (!sig) {
+    console.error('No stripe-signature header');
+    return res.status(400).send('No signature header');
+  }
 
   let event;
 
@@ -30,7 +37,6 @@ export default async function handler(req, res) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle successful payment
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const invoiceId = session.metadata?.invoiceId;
@@ -56,14 +62,29 @@ export default async function handler(req, res) {
             : doc
         );
         await client.set(DOCUMENTS_KEY, JSON.stringify(docs));
-        console.log(`Marked invoice #${invoiceId} as paid`);
+        console.log(`Invoice #${invoiceId} marked as paid`);
       }
+
+      // Push notification
+      const token = await client.get(PUSH_TOKEN_KEY);
+      if (token) {
+        await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: token,
+            title: 'Payment Received! 🎉',
+            body: `Invoice #${invoiceId} has been paid`,
+            sound: 'default',
+          }),
+        });
+      }
+
       await client.disconnect();
     } catch (err) {
-      console.error('Failed to update paid status:', err);
+      console.error('Redis update failed:', err);
     }
   }
 
-  // Always respond 200
   res.status(200).json({ received: true });
 }
