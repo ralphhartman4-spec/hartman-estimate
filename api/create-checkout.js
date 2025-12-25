@@ -15,7 +15,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing amount or invoiceId' });
     }
 
-    const amountInCents = Math.round(parseFloat(amount) * 100);
+   
 
     if (amountInCents < 50) {
       return res.status(400).json({ error: 'Amount too small' });
