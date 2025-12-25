@@ -6,7 +6,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 const DOCUMENTS_KEY = 'documents:all';
-const PUSH_TOKEN_KEY = 'expo-push-token';
 
 export const config = {
   api: {
@@ -27,51 +26,44 @@ export default async function handler(req, res) {
   try {
     event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
   } catch (err) {
+    console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  // Handle successful payment
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const invoiceId = session.metadata?.invoiceId;
 
-    if (invoiceId) {
-      const client = createClient({ url: process.env.REDIS_URL });
-      client.on('error', (err) => console.error('Redis Error', err));
+    if (!invoiceId) {
+      console.log('No invoiceId in metadata');
+      return res.status(200).json({ received: true });
+    }
 
-      try {
-        await client.connect();
-        const data = await client.get(DOCUMENTS_KEY);
-        if (data) {
-          let docs = JSON.parse(data);
-          docs = docs.map(doc =>
-            doc.invoiceNumber === invoiceId && doc.type === 'invoice'
-              ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
-              : doc
-          );
-          await client.set(DOCUMENTS_KEY, JSON.stringify(docs));
-        }
+    console.log(`Payment succeeded for invoice #${invoiceId}`);
 
-        // Push notification
-        const token = await client.get(PUSH_TOKEN_KEY);
-        if (token) {
-          await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: token,
-              title: 'Payment Received! 🎉',
-              body: `Invoice #${invoiceId} has been paid`,
-              sound: 'default',
-            }),
-          });
-        }
+    const client = createClient({ url: process.env.REDIS_URL });
+    client.on('error', (err) => console.error('Redis Error', err));
 
-        await client.disconnect();
-      } catch (err) {
-        console.error('Webhook Redis error:', err);
+    try {
+      await client.connect();
+      const data = await client.get(DOCUMENTS_KEY);
+      if (data) {
+        let docs = JSON.parse(data);
+        docs = docs.map(doc =>
+          doc.invoiceNumber === invoiceId && doc.type === 'invoice'
+            ? { ...doc, status: 'paid', paidAt: new Date().toISOString() }
+            : doc
+        );
+        await client.set(DOCUMENTS_KEY, JSON.stringify(docs));
+        console.log(`Marked invoice #${invoiceId} as paid`);
       }
+      await client.disconnect();
+    } catch (err) {
+      console.error('Failed to update paid status:', err);
     }
   }
 
+  // Always respond 200
   res.status(200).json({ received: true });
 }
