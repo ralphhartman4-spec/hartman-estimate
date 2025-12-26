@@ -6,11 +6,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 const DOCUMENTS_KEY = 'documents:all';
-const PUSH_TOKEN_KEY = 'expo-push-token';
 
 export const config = {
   api: {
-    bodyParser: false, // ← Critical for raw body
+    bodyParser: false, // ← Required for raw body
   },
 };
 
@@ -19,7 +18,6 @@ export default async function handler(req, res) {
     return res.status(405).end('Method Not Allowed');
   }
 
-  // Read raw body (exactly like Stripe sample)
   const buf = await buffer(req);
   const sig = req.headers['stripe-signature'];
 
@@ -28,11 +26,11 @@ export default async function handler(req, res) {
   try {
     event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error(`⚠️ Webhook signature verification failed.`, err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle successful payment
+  // Handle the event
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const invoiceId = session.metadata?.invoiceId;
@@ -49,7 +47,6 @@ export default async function handler(req, res) {
 
     try {
       await client.connect();
-
       const data = await client.get(DOCUMENTS_KEY);
       if (data) {
         let docs = JSON.parse(data);
@@ -61,27 +58,12 @@ export default async function handler(req, res) {
         await client.set(DOCUMENTS_KEY, JSON.stringify(docs));
         console.log(`Invoice #${invoiceId} marked as paid`);
       }
-
-      // Push notification
-      const token = await client.get(PUSH_TOKEN_KEY);
-      if (token) {
-        await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: token,
-            title: 'Payment Received! 🎉',
-            body: `Invoice #${invoiceId} has been paid`,
-            sound: 'default',
-          }),
-        });
-      }
-
       await client.disconnect();
     } catch (err) {
       console.error('Redis update failed:', err);
     }
   }
 
+  // Return 200 to acknowledge
   res.status(200).json({ received: true });
 }
