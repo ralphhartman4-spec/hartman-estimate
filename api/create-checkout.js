@@ -41,8 +41,7 @@ export default async function handler(req, res) {
         transfer_data: {
           destination: connectedAccountId,
         },
-        // Optional application fee (e.g., 5%)
-        // application_fee_amount: Math.round(amountInCents * 0.05),
+        application_fee_amount: Math.round(amountInCents * 0.01),
       },
       customer_email: customerEmail || undefined,
     });
