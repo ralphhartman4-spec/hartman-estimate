@@ -1,44 +1,31 @@
-import { createClient } from 'redis';
+import { Redis } from '@upstash/redis'; // If you add the package, or use Vercel's if available
 
-const TOKENS_LIST = 'all_push_tokens'; // List to hold all tokens
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
-const getRedisClient = () => {
-  if (!process.env.REDIS_URL) {
-    throw new Error('REDIS_URL environment variable is not set');
-  }
-  const client = createClient({
-    url: process.env.REDIS_URL,
-  });
-  client.on('error', (err) => console.error('Redis Client Error:', err));
-  return client;
-};
+const TOKENS_LIST = 'all_push_tokens';
 
 export async function POST(request) {
   try {
     const { token } = await request.json();
-    if (!token || typeof token !== 'string') {
-      return new Response(JSON.stringify({ error: 'Invalid or missing token' }), { status: 400 });
-    }
-    const client = getRedisClient();
-    await client.connect();
-    await client.rPush(TOKENS_LIST, token); // Add to list
-    await client.disconnect();
+    if (!token) return new Response('Bad token', { status: 400 });
+
+    await redis.rpush(TOKENS_LIST, token); // Or sadd for unique
+
     return new Response(JSON.stringify({ success: true }), { status: 200 });
-  } catch (error) {
-    console.error('Save push token error:', error);
-    return new Response(JSON.stringify({ error: 'Failed to save token' }), { status: 500 });
+  } catch (e) {
+    console.error(e);
+    return new Response('Error', { status: 500 });
   }
 }
 
 export async function GET() {
   try {
-    const client = getRedisClient();
-    await client.connect();
-    const count = await client.lLen(TOKENS_LIST); // Count tokens
-    await client.disconnect();
+    const count = await redis.llen(TOKENS_LIST);
     return new Response(JSON.stringify({ totalTokens: count }), { status: 200 });
-  } catch (error) {
-    console.error('Get tokens error:', error);
+  } catch (e) {
     return new Response(JSON.stringify({ totalTokens: 0 }), { status: 500 });
   }
 }
