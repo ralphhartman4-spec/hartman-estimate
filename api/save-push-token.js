@@ -1,39 +1,46 @@
 import { createClient } from 'redis';
 
-const TOKENS_LIST = 'all_push_tokens'; // Redis list key
+const TOKENS_LIST = 'all_push_tokens'; // Redis list key for all tokens
 
-const client = createClient({
-  url: process.env.REDIS_URL,
-});
-client.on('error', (err) => console.error('Redis Error:', err));
+const getRedisClient = () => {
+  if (!process.env.REDIS_URL) {
+    throw new Error('REDIS_URL environment variable is not set');
+  }
+  const client = createClient({
+    url: process.env.REDIS_URL,
+  });
+  client.on('error', (err) => console.error('Redis Client Error:', err));
+  return client;
+};
 
 export async function POST(request) {
   try {
     const { token } = await request.json();
     if (!token || typeof token !== 'string') {
-      return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Invalid or missing token' }), { status: 400 });
     }
-
+    const client = getRedisClient();
     await client.connect();
-    // Add token to the end of the list (duplicates OK for now, or use LPUSH with check if you want)
+    // Push token to the list (allows duplicates for now — fine for notifications)
     await client.rPush(TOKENS_LIST, token);
     await client.disconnect();
-
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (error) {
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ error: 'Failed' }), { status: 500 });
+    console.error('Save push token error:', error);
+    return new Response(JSON.stringify({ error: 'Failed to save token' }), { status: 500 });
   }
 }
 
-// For debugging — see how many tokens we have
+// Debug: See how many tokens we have
 export async function GET() {
   try {
+    const client = getRedisClient();
     await client.connect();
     const count = await client.lLen(TOKENS_LIST);
     await client.disconnect();
     return new Response(JSON.stringify({ totalTokens: count }), { status: 200 });
   } catch (error) {
+    console.error('Get tokens error:', error);
     return new Response(JSON.stringify({ totalTokens: 0 }), { status: 500 });
   }
 }
