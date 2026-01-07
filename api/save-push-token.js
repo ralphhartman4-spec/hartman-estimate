@@ -1,6 +1,6 @@
 import { createClient } from 'redis';
 
-const TOKENS_LIST = 'all_push_tokens'; // Redis list key for all tokens
+const TOKENS_LIST = 'all_push_tokens'; // List to hold all tokens
 
 const getRedisClient = () => {
   if (!process.env.REDIS_URL) {
@@ -21,8 +21,7 @@ export async function POST(request) {
     }
     const client = getRedisClient();
     await client.connect();
-    // Push token to the list (allows duplicates for now — fine for notifications)
-    await client.rPush(TOKENS_LIST, token);
+    await client.rPush(TOKENS_LIST, token); // Add to list
     await client.disconnect();
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (error) {
@@ -31,12 +30,11 @@ export async function POST(request) {
   }
 }
 
-// Debug: See how many tokens we have
 export async function GET() {
   try {
     const client = getRedisClient();
     await client.connect();
-    const count = await client.lLen(TOKENS_LIST);
+    const count = await client.lLen(TOKENS_LIST); // Count tokens
     await client.disconnect();
     return new Response(JSON.stringify({ totalTokens: count }), { status: 200 });
   } catch (error) {
